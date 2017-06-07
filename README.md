@@ -24,6 +24,6 @@ Linux
 Windows
 dude idk right now just cry http://docs.opencv.org/2.4/doc/tutorials/introduction/windows_install/windows_install.html
 
-
+kk
 
 
