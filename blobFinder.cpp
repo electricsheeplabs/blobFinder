@@ -1,9 +1,40 @@
+/*
+Blob Finder
+Programmer: Nick Crescimanno
+Date created: 1/6/2017
 
-//NOTES
-////////////////////////////////loop until blob is found or no convergence made////////////////////////////////////////
-	//Specifically: the loop increases threshold_value from threshold_min to threshold_max and checks if blob finder sees 
-	//anything at each threshold value...simple blob finder actually basically does this exact thing but i for some reason like 
-    //this way, have more control...at least for now it seems to work, should try to use just simple blob finder (or a different algorithm) in the future...
+This program uses openCV to identify white blobs in the center of a 1080p image. 
+It's original purpose is to identify the signal from ionized liquid Helium nanodroplets 
+whose ions (or electrons) are accelerated into an MCP (multi-channel plate) which amplifies 
+the electrical signal by multiple orders of magnitude. The signal is then converted to light 
+via a phosphor screen and a camera literally records the light from the phosphor screen. 
+
+There is some hard coding for our specific setup, such as the region of interest which is 
+fixed towards the center of the image. Also the image conditioning parameters (blur, threshold, morphing) 
+is hardcoded to get best results for our signal. So, parameters likely will not be optimal for a different setup. 
+
+The use of the program is simple in that one just enters the directory of the location of the images 
+he/she wishes to analyze and the script does the rest. A folder "analyzed" is created with the data file, 
+and other stuff if you want (one can toggle, for example, the processed image output). Currently the data columns 
+in "data.txt" are diameter, x coord, and y coord of the blob. 
+
+TO DO:
+. Add in brightness of blob analysis
+. Utilize SimpleBlobDetector more efficiently, or use different object detection all together (hugh circle??)
+. add Windows use instructions (see below)
+. crop blob before intensity measurement!!!
+
+Instructions for use:
+Linux 
+. download and compile openCV
+. install cmake
+. clone da repo to blobFinder directory
+. in terminal execute "cmake .", "make" to make the program
+. run with "./blobFinder"
+
+Windows
+dude idk right now just cry http://docs.opencv.org/2.4/doc/tutorials/introduction/windows_install/windows_install.html
+*/
 
 #include "opencv2/opencv.hpp"
 #include <iostream>
@@ -16,12 +47,14 @@ using namespace cv;
 using namespace std;
 
 //methods
-void printPic(Mat m, string extension, int i, double x, double y, double dia);
+void printPic(Mat m, string extension, int i);
 Mat getRoi(Mat m);
 SimpleBlobDetector::Params getParams();
-void printData(string out, int numDatapoints, double dia[], double coords[][2]);
+void printData(string out, int numDatapoints, int dia[], int coords[][2], double intensity[]);
 bool isDirExist(const std::string& path);
 bool makePath(const std::string& path);
+double getIntensity(Mat, int rad);
+Mat blobOnly(Mat m, int x, int y, int rad);
 
 //things user may want to change in the future
 int const threshold_min = 10;
@@ -61,8 +94,10 @@ int main(int argc, char** argv)
 	vector<String> filenames; // notice here that we are using the Opencv's embedded "String" class
     glob(extension, filenames); // convenient opencv function that gets all the files! :D
 	const int numImages = filenames.size();
-	double diameters[numImages] = {0};
-	double coords[numImages][2] = {0};
+	int diameters[numImages] = {0};
+    int radius = 0;
+	int coords[numImages][2] = {0};
+    double intensity[numImages] = {0.0};
 
     //loop over all images in the folder
     for(size_t i = 0; i < filenames.size(); ++i)
@@ -104,15 +139,25 @@ int main(int argc, char** argv)
                     for(std::vector<cv::KeyPoint>::iterator blobIterator = keypoints.begin(); blobIterator != keypoints.end(); blobIterator++){
                         if((blobIterator->pt.x > targetXmin)&&(blobIterator->pt.x < targetXmax)&&(blobIterator->pt.y > targetYmin)&&(blobIterator->pt.y < targetYmax)){
                             //store diameter and coords of blob in array
-                            diameters[i] = blobIterator->size;
-                            coords[i][0] = blobIterator->pt.x;
-                            coords[i][1] = blobIterator->pt.y;
+                            diameters[i] = (int)blobIterator->size;
+                            coords[i][0] = (int)blobIterator->pt.x;
+                            coords[i][1] = (int)blobIterator->pt.y;
 
                             //clean up and jump out of loop to move to next image
                             convergedBlobs++;
                             flag = 0;
                             threshold_value = threshold_min;
-                            printPic(im2, dataPath+"/", i, coords[i][0], coords[i][1], diameters[i]);
+                            
+                            //calculate intensity
+                            radius = (int)(blobIterator->size/2.0);
+                            Mat blob = blobOnly(im, coords[i][0], coords[i][1], radius);
+                            intensity[i] = getIntensity(blob, radius);
+
+                            //print processed image with circle around blob
+                            circle(im2, Point(coords[i][0], coords[i][1]), radius, (0,255,0), 5, 8, 0);
+                            printPic(im2, dataPath+"/", i);
+                            //print blobOnly if you want
+                            printPic(blob, dataPath+"/blobOnly", i);
                         }
                         else threshold_value++;
                         //keep track of total number of blobs identified
@@ -132,28 +177,27 @@ int main(int argc, char** argv)
     }
     
     //print to file
-    printData(dataPath+"/data.txt", numImages, diameters, coords);
+    printData(dataPath+"/data.txt", numImages, diameters, coords, intensity);
 
 	//print info
 	cout << "number of images: " << numImages << endl;
 	cout << "blobs detected: " << totBlobs << endl;
 	cout << "identified events: " << convergedBlobs << endl;
+    cout << "data (and optional images) stored in " << dataPath+"/data.txt" << endl;
 	
 return 0;
 }
 
 
 
-void printPic(Mat m, string extension, int i, double x, double y, double dia){
+void printPic(Mat m, string extension, int i){
     //print pic of resulting convergence
-	Mat im_with_keypoints;
+	//Mat im_with_keypoints;
     stringstream ss;
 	ss << extension << i+1 << ".jpg";
 	string out = ss.str();
-	int rad = (int)(dia/2.0);
 	//drawKeypoints( im2, keypoints, im_with_keypoints, Scalar(0,0,255), DrawMatchesFlags::DRAW_RICH_KEYPOINTS );
-	circle(m, Point(x,y),rad, (0,255,0), 5, 8, 0);
-	imwrite( out, im2);
+	imwrite( out, m);
 }
 
 Mat getRoi(Mat m){
@@ -201,13 +245,34 @@ SimpleBlobDetector::Params getParams(){
     return params;
 }
 
-void printData(string out, int numDatapoints, double dia[], double coords[][2]){
+void printData(string out, int numDatapoints, int dia[], int coords[][2], double intensity[]){
     //print diameter data...
     ofstream outFile;
     string diaOut = out;
     outFile.open(diaOut.c_str());
-	for(int i = 0; i < numDatapoints; ++i) outFile << dia[i] << " " << coords[i][0] << " " << coords[i][1] << endl;
+    outFile <<setw(6)<<left<<"#dia"<<setw(6)<<left<<"x"<<setw(6)<<left<<"y"<<setw(6)<<left<<"intensity" << endl;
+	for(int i = 0; i < numDatapoints; ++i) outFile <<setw(6)<<left<< dia[i] <<setw(6)<<left<< coords[i][0] <<setw(6)<<left<< coords[i][1] <<setw(6)<<left<<setprecision(4)<< intensity[i] << endl;
 	outFile.close();
+}
+
+Mat blobOnly(Mat m, int x, int y, int rad){
+    //create black mask
+    Mat mask = cv::Mat::zeros(m.size(), CV_8UC1);
+    //draw white circle on mask where blob is
+    circle(mask, Point(x, y), rad, 255, -1);
+    //create another black image that only the blob will copy in to
+    Mat blobOnly = cv::Mat::zeros(m.size(), m.type());
+    //mask is a white circle with black background, and its non-zero elements tell "copyTo" which pixels of "m" to put in the black "blobOnly"
+    m.copyTo(blobOnly, mask);
+    return blobOnly;
+}
+
+double getIntensity(Mat blob, int rad){
+    //sum the blob and all the black pixels in the background, no its not efficient but its one line so... :D
+    double intensity = sum(blob)[0];
+    //so intensity now has the average intensity of the blob
+    intensity /= (3.14159*rad*rad);
+    return intensity;
 }
 
 //https://stackoverflow.com/questions/675039/how-can-i-create-directory-tree-in-c-linux
