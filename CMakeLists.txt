@@ -1,0 +1,6 @@
+cmake_minimum_required(VERSION 2.8)
+project( blobFinder )
+find_package( OpenCV REQUIRED )
+include_directories( ${OpenCV_INCLUDE_DIRS} )
+add_executable( blobFinder blobFinder.cpp )
+target_link_libraries( blobFinder ${OpenCV_LIBS} )
