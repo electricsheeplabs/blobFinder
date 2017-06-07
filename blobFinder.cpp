@@ -4,7 +4,7 @@
 	//Specifically: the loop increases threshold_value from threshold_min to threshold_max and checks if blob finder sees 
 	//anything at each threshold value...simple blob finder actually basically does this exact thing but i for some reason like 
     //this way, have more control...at least for now it seems to work, should try to use just simple blob finder (or a different algorithm) in the future...
-
+//poop
 #include "opencv2/opencv.hpp"
 #include <iostream>
 #include <sstream>
