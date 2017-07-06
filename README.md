@@ -26,4 +26,6 @@ Linux
 Windows
 dude idk right now just cry http://docs.opencv.org/2.4/doc/tutorials/introduction/windows_install/windows_install.html
 
+make blob video:
+ffmpeg -f image2 -framerate 25 -pattern_type glob -r 10 -i '*.tiff' -pix_fmt yuv420p -s 720x480 fast.avi
 
